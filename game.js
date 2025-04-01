@@ -5,13 +5,25 @@ class Game {
     this.canvas.width = 800;
     this.canvas.height = 600;
 
+    // Load turtle image
+    this.turtleImage = new Image();
+    this.turtleImage.src = "kailey-turtle.png";
+
+    // Add error handling for image loading
+    this.turtleImage.onerror = () => {
+      console.error("Error loading turtle image");
+    };
+
+    this.turtleImage.onload = () => {
+      console.log("Turtle image loaded successfully");
+    };
+
     this.player = {
       x: this.canvas.width / 2,
       y: this.canvas.height / 2,
-      width: 40,
-      height: 40,
+      width: 100, // Adjusted for the image
+      height: 100, // Adjusted for the image
       speed: 5,
-      direction: 0,
       isMoving: false,
     };
 
@@ -152,39 +164,72 @@ class Game {
   }
 
   generatePlants() {
+    // Clear existing plants
+    this.plants = [];
+
+    // Define minimum distance between plants
+    const minDistance = 100;
+    const maxAttempts = 50;
+
+    // Generate 5 plants with spacing
     for (let i = 0; i < 5; i++) {
-      this.plants.push({
-        x: Math.random() * (this.canvas.width - 30) + 15,
-        y: Math.random() * (this.canvas.height - 100) + 50,
-        width: 20,
-        height: 20,
-        collected: false,
-      });
+      let attempts = 0;
+      let validPosition = false;
+      let newPlant;
+
+      while (!validPosition && attempts < maxAttempts) {
+        // Generate random position
+        newPlant = {
+          x: Math.random() * (this.canvas.width - 40) + 20, // Keep away from edges
+          y: Math.random() * (this.canvas.height - 150) + 50, // Keep away from bottom
+          width: 30, // Increased size
+          height: 30, // Increased size
+          collected: false,
+          type: Math.floor(Math.random() * 3), // Random plant type
+        };
+
+        // Check if this position is far enough from other plants
+        validPosition = true;
+        for (const plant of this.plants) {
+          const dx = newPlant.x - plant.x;
+          const dy = newPlant.y - plant.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+
+          if (distance < minDistance) {
+            validPosition = false;
+            break;
+          }
+        }
+
+        attempts++;
+      }
+
+      if (validPosition) {
+        this.plants.push(newPlant);
+      }
     }
   }
 
   update() {
-    // Player movement
+    // Player movement - removed direction setting since we don't need it anymore
+    let isMoving = false;
     if (this.keys["ArrowLeft"] || this.keys["a"]) {
       this.player.x -= this.player.speed;
-      this.player.isMoving = true;
-      this.player.direction = Math.PI;
+      isMoving = true;
     }
     if (this.keys["ArrowRight"] || this.keys["d"]) {
       this.player.x += this.player.speed;
-      this.player.isMoving = true;
-      this.player.direction = 0;
+      isMoving = true;
     }
     if (this.keys["ArrowUp"] || this.keys["w"]) {
       this.player.y -= this.player.speed;
-      this.player.isMoving = true;
-      this.player.direction = -Math.PI / 2;
+      isMoving = true;
     }
     if (this.keys["ArrowDown"] || this.keys["s"]) {
       this.player.y += this.player.speed;
-      this.player.isMoving = true;
-      this.player.direction = Math.PI / 2;
+      isMoving = true;
     }
+    this.player.isMoving = isMoving;
 
     // Keep player in bounds
     this.player.x = Math.max(
@@ -232,72 +277,195 @@ class Game {
   drawReef() {
     const { x, y, width, height, growth, stage } = this.reef;
 
-    // Draw base reef with gradient
-    const gradient = this.ctx.createLinearGradient(x, y, x + width, y + height);
-    gradient.addColorStop(
-      0,
-      `rgb(${50 + growth * 100}, ${150 + growth * 50}, ${200 + growth * 50})`
-    );
-    gradient.addColorStop(
-      1,
-      `rgb(${100 + growth * 100}, ${200 + growth * 50}, ${250 + growth * 50})`
-    );
-    this.ctx.fillStyle = gradient;
-    this.ctx.fillRect(
-      x,
-      y - growth * 20,
-      width + growth * 20,
-      height + growth * 20
-    );
+    // Draw sandy bottom
+    const sandGradient = this.ctx.createLinearGradient(0, y, 0, y + height);
+    sandGradient.addColorStop(0, "#f2d16c");
+    sandGradient.addColorStop(1, "#d4b65c");
+    this.ctx.fillStyle = sandGradient;
+    this.ctx.fillRect(0, y, this.canvas.width, height + 50);
 
     // Draw coral formations based on stage
-    for (let i = 0; i < stage + 1; i++) {
-      const coralX = x + (width * (i + 1)) / (stage + 2);
-      const coralY = y - growth * 20;
+    const coralTypes = [
+      { color: "#ff7e7e", highlight: "#ff9e9e" }, // Pink coral
+      { color: "#ff9649", highlight: "#ffb679" }, // Orange coral
+      { color: "#d162a4", highlight: "#e182c4" }, // Purple coral
+      { color: "#30b3c4", highlight: "#50d3e4" }, // Blue coral
+    ];
 
-      // Draw multiple coral branches with different patterns
-      for (let j = 0; j < 3; j++) {
-        this.ctx.beginPath();
-        this.ctx.moveTo(coralX, coralY);
+    // Draw one coral formation per stage
+    for (let i = 0; i < stage; i++) {
+      // Calculate position for this coral
+      const coralX = (this.canvas.width / (stage + 1)) * (i + 1);
+      const coralY = y - height * 0.4; // Slightly higher than before
+      const coralType = coralTypes[i % coralTypes.length];
 
-        // Create more complex coral patterns based on stage
-        const branches = 3 + stage;
-        for (let k = 0; k < branches; k++) {
-          const angle = (Math.PI * 2 * k) / branches;
-          const length = 20 + growth * 10 + Math.sin(Date.now() / 1000 + k) * 5;
-          const branchAngle = angle + Math.sin(Date.now() / 1000 + k) * 0.2;
+      // Draw larger branching coral
+      this.drawBranchingCoral(
+        coralX,
+        coralY,
+        50 + growth * 30, // Larger size
+        coralType.color,
+        coralType.highlight,
+        stage
+      );
 
-          this.ctx.lineTo(
-            coralX + Math.cos(branchAngle) * length,
-            coralY + Math.sin(branchAngle) * length
-          );
-        }
+      // Draw larger bubble coral clusters
+      this.drawBubbleCoral(
+        coralX + 30,
+        coralY + 20,
+        25 + growth * 15,
+        coralType.color,
+        coralType.highlight
+      );
+    }
 
-        this.ctx.closePath();
+    // Draw seaweed spread out across the bottom
+    const seaweedSpacing = this.canvas.width / (5 + stage * 2);
+    for (let i = 0; i < 5 + stage * 2; i++) {
+      const seaweedX = seaweedSpacing * (i + 1);
+      this.drawSeaweed(seaweedX, y, 60 + growth * 20);
+    }
+  }
 
-        // Create gradient for coral
-        const coralGradient = this.ctx.createRadialGradient(
-          coralX,
-          coralY,
-          0,
-          coralX,
-          coralY,
-          30 + growth * 10
-        );
-        coralGradient.addColorStop(
-          0,
-          `rgb(${200 + growth * 55}, ${100 + growth * 50}, ${
-            150 + growth * 50
-          })`
-        );
-        coralGradient.addColorStop(
-          1,
-          `rgb(${150 + growth * 55}, ${50 + growth * 50}, ${100 + growth * 50})`
-        );
-        this.ctx.fillStyle = coralGradient;
-        this.ctx.fill();
+  drawRoundedRect(x, y, width, height, radius) {
+    this.ctx.beginPath();
+    this.ctx.moveTo(x + radius, y);
+    this.ctx.lineTo(x + width - radius, y);
+    this.ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    this.ctx.lineTo(x + width, y + height - radius);
+    this.ctx.quadraticCurveTo(
+      x + width,
+      y + height,
+      x + width - radius,
+      y + height
+    );
+    this.ctx.lineTo(x + radius, y + height);
+    this.ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    this.ctx.lineTo(x, y + radius);
+    this.ctx.quadraticCurveTo(x, y, x + radius, y);
+    this.ctx.closePath();
+    this.ctx.fill();
+  }
+
+  drawBranchingCoral(x, y, size, color, highlightColor, stage) {
+    const time = Date.now() / 1000;
+    const branches = 3 + stage;
+    const swayAmount = 0.1;
+
+    this.ctx.save();
+    this.ctx.translate(x, y);
+
+    // Draw main branches
+    for (let i = 0; i < branches; i++) {
+      const angle =
+        (i / branches) * Math.PI * 2 + Math.sin(time + i) * swayAmount;
+      this.drawCoralBranch(0, 0, angle, size, color, highlightColor, 3);
+    }
+
+    this.ctx.restore();
+  }
+
+  drawCoralBranch(x, y, angle, length, color, highlightColor, depth) {
+    if (depth <= 0) return;
+
+    const time = Date.now() / 1000;
+    const endX = x + Math.cos(angle) * length;
+    const endY = y + Math.sin(angle) * length;
+
+    // Draw branch
+    this.ctx.beginPath();
+    this.ctx.moveTo(x, y);
+    this.ctx.lineTo(endX, endY);
+    this.ctx.lineWidth = depth * 2;
+    this.ctx.strokeStyle = color;
+    this.ctx.stroke();
+
+    // Draw highlight
+    this.ctx.beginPath();
+    this.ctx.moveTo(x, y);
+    this.ctx.lineTo(endX, endY);
+    this.ctx.lineWidth = depth;
+    this.ctx.strokeStyle = highlightColor;
+    this.ctx.stroke();
+
+    // Draw sub-branches
+    const branchCount = 2;
+    for (let i = 0; i < branchCount; i++) {
+      const newAngle =
+        angle + (Math.PI / 4) * (i - 0.5) + Math.sin(time + depth) * 0.1;
+      this.drawCoralBranch(
+        endX,
+        endY,
+        newAngle,
+        length * 0.7,
+        color,
+        highlightColor,
+        depth - 1
+      );
+    }
+  }
+
+  drawBubbleCoral(x, y, size, color, highlightColor) {
+    const bubbleCount = 5;
+    const time = Date.now() / 1000;
+
+    for (let i = 0; i < bubbleCount; i++) {
+      const angle = (i / bubbleCount) * Math.PI * 2;
+      const distance = size * 0.5;
+      const bubbleX = x + Math.cos(angle) * distance;
+      const bubbleY = y + Math.sin(angle) * distance + Math.sin(time + i) * 2;
+      const bubbleSize = size * (0.3 + Math.sin(time * 2 + i) * 0.1);
+
+      // Draw main bubble
+      this.ctx.beginPath();
+      this.ctx.arc(bubbleX, bubbleY, bubbleSize, 0, Math.PI * 2);
+      this.ctx.fillStyle = color;
+      this.ctx.fill();
+
+      // Draw highlight
+      this.ctx.beginPath();
+      this.ctx.arc(
+        bubbleX - bubbleSize * 0.2,
+        bubbleY - bubbleSize * 0.2,
+        bubbleSize * 0.8,
+        0,
+        Math.PI * 2
+      );
+      this.ctx.fillStyle = highlightColor;
+      this.ctx.fill();
+    }
+  }
+
+  drawSeaweed(x, y, height) {
+    const segments = 10;
+    const segmentHeight = height / segments;
+    const time = Date.now() / 1000;
+    const frequency = 3;
+    const amplitude = 15;
+
+    this.ctx.beginPath();
+    this.ctx.moveTo(x, y);
+
+    for (let i = 0; i <= segments; i++) {
+      const segmentY = y - i * segmentHeight;
+      const swayAmount = Math.sin(time * frequency + i * 0.5) * amplitude;
+      const segmentX = x + swayAmount;
+
+      if (i === 0) {
+        this.ctx.moveTo(segmentX, segmentY);
+      } else {
+        this.ctx.lineTo(segmentX, segmentY);
       }
     }
+
+    this.ctx.lineWidth = 4;
+    this.ctx.strokeStyle = "#2d9b27";
+    this.ctx.stroke();
+
+    // Draw highlight
+    this.ctx.lineWidth = 2;
+    this.ctx.strokeStyle = "#3cc636";
+    this.ctx.stroke();
   }
 
   drawBubbles() {
@@ -378,59 +546,87 @@ class Game {
     this.drawCurrents();
     this.drawReef();
 
-    // Draw plants
-    this.ctx.fillStyle = "#4CAF50";
+    // Draw plants with more interesting visuals
     this.plants.forEach((plant) => {
       if (!plant.collected) {
-        this.ctx.fillRect(plant.x, plant.y, plant.width, plant.height);
+        const plantX = plant.x + plant.width / 2;
+        const plantY = plant.y + plant.height / 2;
+        const time = Date.now() / 1000;
+
+        // Draw plant base
+        this.ctx.beginPath();
+        this.ctx.arc(plantX, plantY, plant.width / 2, 0, Math.PI * 2);
+        this.ctx.fillStyle = "#4CAF50";
+        this.ctx.fill();
+        this.ctx.strokeStyle = "#2E7D32";
+        this.ctx.lineWidth = 2;
+        this.ctx.stroke();
+
+        // Draw plant details based on type
+        switch (plant.type) {
+          case 0: // Seaweed-like
+            for (let i = 0; i < 3; i++) {
+              this.ctx.beginPath();
+              this.ctx.moveTo(plantX - 10 + i * 10, plantY);
+              this.ctx.quadraticCurveTo(
+                plantX - 5 + i * 10 + Math.sin(time * 2) * 5,
+                plantY - 15,
+                plantX - 10 + i * 10,
+                plantY - 30
+              );
+              this.ctx.strokeStyle = "#81C784";
+              this.ctx.lineWidth = 4;
+              this.ctx.stroke();
+            }
+            break;
+          case 1: // Star-shaped
+            for (let i = 0; i < 5; i++) {
+              const angle = (i / 5) * Math.PI * 2;
+              this.ctx.beginPath();
+              this.ctx.moveTo(plantX, plantY);
+              this.ctx.lineTo(
+                plantX + Math.cos(angle) * plant.width * 0.7,
+                plantY + Math.sin(angle) * plant.height * 0.7
+              );
+              this.ctx.strokeStyle = "#81C784";
+              this.ctx.lineWidth = 5;
+              this.ctx.stroke();
+            }
+            break;
+          case 2: // Bubble cluster
+            for (let i = 0; i < 4; i++) {
+              const angle = (i / 4) * Math.PI * 2;
+              const bubbleX = plantX + Math.cos(angle) * 10;
+              const bubbleY =
+                plantY + Math.sin(angle) * 10 + Math.sin(time * 2 + i) * 3;
+              this.ctx.beginPath();
+              this.ctx.arc(bubbleX, bubbleY, 8, 0, Math.PI * 2);
+              this.ctx.fillStyle = "#A5D6A7";
+              this.ctx.fill();
+              this.ctx.strokeStyle = "#81C784";
+              this.ctx.lineWidth = 2;
+              this.ctx.stroke();
+            }
+            break;
+        }
       }
     });
 
-    // Draw player (turtle) with updated rotation
-    this.ctx.save();
-    this.ctx.translate(
-      this.player.x + this.player.width / 2,
-      this.player.y + this.player.height / 2
-    );
-    this.ctx.rotate(
-      this.player.direction +
-        (this.player.isMoving ? Math.sin(Date.now() / 100) * 0.2 : 0)
-    );
-
-    // Turtle body
-    this.ctx.fillStyle = "#2E7D32";
-    this.ctx.fillRect(
-      -this.player.width / 2,
-      -this.player.height / 2,
-      this.player.width,
-      this.player.height
-    );
-
-    // Turtle head
-    this.ctx.fillStyle = "#1B5E20";
-    this.ctx.fillRect(
-      this.player.width / 2 - 15,
-      -this.player.height / 2 + 10,
-      20,
-      20
-    );
-
-    // Fins
-    this.ctx.fillStyle = "#388E3C";
-    this.ctx.fillRect(
-      -this.player.width / 2,
-      -this.player.height / 2 + 5,
-      10,
-      30
-    );
-    this.ctx.fillRect(
-      this.player.width / 2 - 10,
-      -this.player.height / 2 + 5,
-      10,
-      30
-    );
-
-    this.ctx.restore();
+    // Draw player (turtle)
+    if (this.turtleImage.complete) {
+      this.ctx.save();
+      const bobOffset = this.player.isMoving
+        ? Math.sin(Date.now() / 100) * 3
+        : 0;
+      this.ctx.drawImage(
+        this.turtleImage,
+        this.player.x,
+        this.player.y + bobOffset,
+        this.player.width,
+        this.player.height
+      );
+      this.ctx.restore();
+    }
   }
 
   gameLoop() {
